@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Wallet">
+<meta name="theme-color" content="#111214">
+<meta name="format-detection" content="telephone=no">
+<title>Barcode Wallet</title>
+<link rel="apple-touch-icon" id="touchIcon" href="">
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bwip-js@4/dist/bwip-js-min.js"></script>
+<style>
+:root{
+  --bg:#111214;--panel:#1c1d21;--panel2:#2a2c31;--text:#f2f2f4;--muted:#9a9ca3;
+  --accent:#4c8dff;--danger:#ff5a52;--radius:16px;
+  --st:env(safe-area-inset-top);--sb:env(safe-area-inset-bottom);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);overflow-x:hidden;
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+body{min-height:100vh;padding:calc(var(--st) + 8px) 16px calc(var(--sb) + 96px)}
+body.noscroll{overflow:hidden}
+header{display:flex;align-items:center;gap:8px;margin:8px 0 16px}
+h1{font-size:30px;margin:0;flex:1}
+h2{font-size:20px;margin:0 0 14px}
+.btn{appearance:none;-webkit-appearance:none;border:0;border-radius:12px;background:var(--panel2);color:var(--text);
+  font:inherit;font-weight:600;min-height:48px;padding:0 16px;cursor:pointer;user-select:none;-webkit-user-select:none}
+.btn:active{opacity:.75}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid #4a2b2b}
+.btn.block{width:100%}
+.hint{color:var(--muted);font-size:14px;margin:-6px 0 12px}
+.list{display:flex;flex-direction:column;gap:14px}
+.card{border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:10px;
+  box-shadow:0 2px 12px rgba(0,0,0,.35);cursor:pointer;user-select:none;-webkit-user-select:none}
+.card:active{transform:scale(.99)}
+.card-top{display:flex;align-items:center;gap:8px;min-height:40px}
+.card-name{font-weight:700;font-size:20px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lock{font-size:13px;opacity:.75}
+.preview{background:#fff;border-radius:10px;height:70px;display:flex;align-items:center;justify-content:center;padding:6px;overflow:hidden;color:#000;font-size:13px}
+.preview svg{display:block;height:100%;width:100%}
+.preview.qr svg,.preview.pdf417 svg{width:auto;max-width:100%}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{appearance:none;border:0;border-radius:10px;min-height:44px;padding:0 14px;font:inherit;font-size:15px;font-weight:600;
+  background:rgba(0,0,0,.28);color:inherit;cursor:pointer}
+.chip:disabled{opacity:.35}
+.empty{color:var(--muted);text-align:center;padding:40px 8px}
+.fab{position:fixed;left:16px;right:16px;bottom:calc(var(--sb) + 16px);min-height:58px;font-size:18px;border-radius:16px;z-index:5;
+  box-shadow:0 6px 20px rgba(0,0,0,.5)}
+
+/* Overlays */
+.overlay{position:fixed;inset:0;z-index:20;display:none;flex-direction:column}
+.overlay.open{display:flex}
+
+/* Full screen barcode, always white */
+.full{background:#fff;color:#000;padding:calc(var(--st) + 12px) 0 0}
+.fv-name{font-size:26px;font-weight:700;text-align:center;padding:8px 16px;word-break:break-word}
+.fv-code{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 8px}
+.fv-code svg{display:block}
+.fv-code.oned svg{width:100%;max-width:700px;height:38vh}
+.fv-code.qr svg{width:min(90vw,60vh);height:auto}
+.fv-code.pdf417 svg{width:100%;max-width:700px;height:auto;max-height:55vh}
+.fv-err{color:#b00020;padding:16px;text-align:center}
+.fv-value{font:600 22px/1.3 ui-monospace,Menlo,monospace;text-align:center;letter-spacing:1px;word-break:break-all;
+  padding:12px 16px;max-height:22vh;overflow:auto}
+.fv-value.long{font-size:14px;letter-spacing:0}
+.fv-bar{display:flex;gap:10px;padding:10px 16px calc(var(--sb) + 14px)}
+.fv-bar .btn{flex:1;background:#eceef1;color:#000}
+.fv-bar .btn.primary{background:#111214;color:#fff}
+
+/* Scanner */
+.scanner{background:#000}
+.scanner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scan-frame{position:absolute;left:7%;right:7%;top:28%;height:30%;border:3px solid rgba(255,255,255,.9);border-radius:18px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.38);pointer-events:none}
+.scan-msg{position:absolute;left:16px;right:16px;top:calc(var(--st) + 20px);text-align:center;color:#fff;font-weight:600;
+  text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.scan-bar{position:absolute;left:16px;right:16px;bottom:calc(var(--sb) + 16px);display:flex;gap:10px}
+.scan-bar .btn{flex:1;min-height:56px}
+
+/* Bottom sheets */
+.sheet-wrap{position:fixed;inset:0;z-index:30;display:none;align-items:flex-end;background:rgba(0,0,0,.55)}
+.sheet-wrap.open{display:flex}
+.sheet{width:100%;max-height:92vh;overflow-y:auto;background:var(--panel);border-radius:20px 20px 0 0;
+  padding:20px 16px calc(var(--sb) + 16px);display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
+label,.label{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted);font-weight:600}
+input,select{font:inherit;font-size:17px;color:var(--text);background:var(--panel2);border:1px solid #3a3c42;border-radius:12px;
+  min-height:50px;padding:0 14px;width:100%;-webkit-appearance:none;appearance:none}
+select{background-image:linear-gradient(45deg,transparent 50%,#999 50%),linear-gradient(135deg,#999 50%,transparent 50%);
+  background-position:calc(100% - 20px) 22px,calc(100% - 15px) 22px;background-size:5px 5px;background-repeat:no-repeat}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.swatch{width:44px;height:44px;border-radius:50%;border:3px solid transparent;cursor:pointer;padding:0}
+.swatch.sel{border-color:#fff}
+.swatch-custom{width:44px;height:44px;min-height:44px;padding:0;border-radius:50%;overflow:hidden;border:2px dashed #777}
+.form-preview{background:#fff;border-radius:12px;height:96px;display:flex;align-items:center;justify-content:center;padding:8px;color:#666;font-size:14px;text-align:center}
+.form-preview svg{display:block;width:100%;height:100%}
+.form-preview.qr svg,.form-preview.pdf417 svg{width:auto;max-width:100%}
+.err{color:var(--danger);font-size:14px;margin:0;min-height:1em}
+.row{display:flex;gap:10px}
+.row .btn{flex:1}
+.small{font-size:13px;color:var(--muted);margin:0}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--sb) + 90px);transform:translateX(-50%);background:#fff;color:#000;
+  padding:12px 18px;border-radius:12px;font-weight:600;z-index:50;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Wallet</h1>
+  <button class="btn" id="editBtn">Edit</button>
+  <button class="btn" id="menuBtn" aria-label="Menu">&#8943;</button>
+</header>
+<p class="hint" id="editHint" hidden>Tap a card to edit it. Preset cards keep their name and colour.</p>
+<div class="list" id="list"></div>
+
+<button class="btn primary fab" id="addBtn">+ Add card</button>
+
+<!-- Full screen barcode -->
+<div class="overlay full" id="full" role="dialog" aria-modal="true">
+  <div class="fv-name" id="fvName"></div>
+  <div class="fv-code" id="fvCode"></div>
+  <div class="fv-value" id="fvValue"></div>
+  <div class="fv-bar">
+    <button class="btn" id="fvSave" hidden>Save</button>
+    <button class="btn" id="fvCopy">Copy link</button>
+    <button class="btn primary" id="fvDone">Done</button>
+  </div>
+</div>
+
+<!-- Scanner -->
+<div class="overlay scanner" id="scanner">
+  <video id="scanVideo" playsinline muted autoplay></video>
+  <div class="scan-frame"></div>
+  <div class="scan-msg" id="scanMsg">Point the camera at a barcode</div>
+  <div class="scan-bar">
+    <button class="btn" id="scanManual">Type it in</button>
+    <button class="btn primary" id="scanCancel">Cancel</button>
+  </div>
+</div>
+
+<!-- Add sheet -->
+<div class="sheet-wrap" id="addSheet">
+  <div class="sheet">
+    <h2>Add card</h2>
+    <button class="btn primary block" id="addScan">Scan barcode</button>
+    <button class="btn block" id="addManual">Enter manually</button>
+    <button class="btn block" data-close>Cancel</button>
+  </div>
+</div>
+
+<!-- Menu sheet -->
+<div class="sheet-wrap" id="menuSheet">
+  <div class="sheet">
+    <h2>Backup</h2>
+    <button class="btn block" id="exportBtn">Export cards (JSON)</button>
+    <button class="btn block" id="importBtn">Import cards (JSON)</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+    <p class="small">Import merges by card id. Preset cards live in the HTML file and are not imported.</p>
+    <button class="btn block" data-close>Close</button>
+  </div>
+</div>
+
+<!-- Add / edit form -->
+<div class="sheet-wrap" id="formSheet">
+  <div class="sheet">
+    <h2 id="formTitle">New card</h2>
+    <div class="form-preview" id="formPreview"></div>
+    <label id="fNameRow">Name<input id="fName" maxlength="40" autocomplete="off" placeholder="e.g. Gym"></label>
+    <label>Barcode value<input id="fValue" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <button class="btn block" id="fScan" type="button">Scan barcode</button>
+    <label>Format<select id="fFormat"></select></label>
+    <div class="label" id="fColourRow">Colour<div class="swatches" id="swatches"></div></div>
+    <p class="err" id="formErr"></p>
+    <div class="row">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" id="fSave">Save</button>
+    </div>
+    <button class="btn danger block" id="fDelete" hidden>Delete card</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== Preset slots: always shown, cannot be deleted. =====
+   Leave value '' to keep the number out of this public file: fill it in the app
+   (saved only on that device/browser). Or set value here to hard-code it.
+   format: CODE128 | CODE39 | EAN13 | EAN8 | UPC | QR | PDF417
+   id is used for deep links, e.g. https://you.github.io/wallet/#gym */
+const PRESET_CARDS = [
+  { id: 'gym', name: 'TotalFusion', value: '', format: 'CODE128', colour: '#0000ff' },
+];
+
+const FORMATS = {
+  CODE128: { label: 'Code 128', kind: 'oned' },
+  CODE39:  { label: 'Code 39',  kind: 'oned' },
+  EAN13:   { label: 'EAN-13',   kind: 'oned' },
+  EAN8:    { label: 'EAN-8',    kind: 'oned' },
+  UPC:     { label: 'UPC-A',    kind: 'oned' },
+  QR:      { label: 'QR Code',  kind: 'qr' },
+  PDF417:  { label: 'PDF417',   kind: 'pdf417' },
+};
+const ZX_TO_FMT = { CODE_128:'CODE128', CODE_39:'CODE39', EAN_13:'EAN13', EAN_8:'EAN8', UPC_A:'UPC', QR_CODE:'QR', PDF_417:'PDF417' };
+const SWATCHES = ['#e4572e','#f3a712','#3bb273','#2e86ab','#7768ae','#d1495b','#00a6a6','#1d3557','#5c5f66','#ff7aa2'];
+const STORE_KEY = 'barcodeWallet.cards.v1';
+const PRESET_KEY = 'barcodeWallet.presets.v1';
+const NS = 'http://www.w3.org/2000/svg';
+
+const $ = s => document.querySelector(s);
+let presetValues = loadPresetValues();
+let userCards = loadCards();
+let editMode = false;
+let fullCard = null, fullTransient = false;
+let wakeLock = null;
+let formTarget = null, formColour = SWATCHES[0];
+let scanControls = null, scanDone = false, scanTarget = null, scanKeep = null;
+
+/* ---------- Storage ---------- */
+function validColour(c){ return /^#[0-9a-f]{6}$/i.test(c || '') ? c : '#5c5f66'; }
+function validCard(c){ return c && typeof c.value === 'string' && c.value.length > 0 && !!FORMATS[c.format]; }
+function cleanCard(c){
+  return { id: String(c.id || newId()), name: String(c.name || 'Card').slice(0, 40), value: c.value, format: c.format, colour: validColour(c.colour) };
+}
+function loadCards(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(validCard).map(cleanCard) : [];
+  } catch (e) { return []; }
+}
+function saveCards(){
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(userCards)); return true; }
+  catch (e) { toast('Could not save: storage unavailable'); return false; }
+}
+function newId(){
+  let id;
+  do { id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  while (allCards().some(c => c.id === id));
+  return id;
+}
+function loadPresetValues(){
+  try { const o = JSON.parse(localStorage.getItem(PRESET_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; }
+  catch (e) { return {}; }
+}
+function savePresetValues(){
+  try { localStorage.setItem(PRESET_KEY, JSON.stringify(presetValues)); return true; }
+  catch (e) { toast('Could not save: storage unavailable'); return false; }
+}
+function setPresetValue(id, value, format){
+  if (value) presetValues[id] = { value, format }; else delete presetValues[id];
+  savePresetValues();
+}
+function allCards(){
+  return PRESET_CARDS.map(p => {
+    const c = { ...p, value: p.value || '', colour: validColour(p.colour), preset: true };
+    const o = presetValues[p.id];
+    if (o && validCard(o)){ c.value = o.value; c.format = o.format; }
+    if (!FORMATS[c.format]) c.format = 'CODE128';
+    c.empty = !c.value;
+    return c;
+  }).concat(userCards || []);
+}
+
+/* ---------- Rendering ---------- */
+function normaliseSvg(svg, stretch){
+  const w = parseFloat(svg.getAttribute('width')), h = parseFloat(svg.getAttribute('height'));
+  if (!svg.getAttribute('viewBox') && w && h) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.removeAttribute('width'); svg.removeAttribute('height'); svg.removeAttribute('style');
+  svg.setAttribute('preserveAspectRatio', stretch ? 'none' : 'xMidYMid meet');
+  svg.setAttribute('shape-rendering', 'crispEdges');
+  return svg;
+}
+const C128_BARS = [11011001100,11001101100,11001100110,10010011000,10010001100,10001001100,10011001000,10011000100,10001100100,11001001000,11001000100,11000100100,10110011100,10011011100,10011001110,10111001100,10011101100,10011100110,11001110010,11001011100,11001001110,11011100100,11001110100,11101101110,11101001100,11100101100,11100100110,11101100100,11100110100,11100110010,11011011000,11011000110,11000110110,10100011000,10001011000,10001000110,10110001000,10001101000,10001100010,11010001000,11000101000,11000100010,10110111000,10110001110,10001101110,10111011000,10111000110,10001110110,11101110110,11010001110,11000101110,11011101000,11011100010,11011101110,11101011000,11101000110,11100010110,11101101000,11101100010,11100011010,11101111010,11001000010,11110001010,10100110000,10100001100,10010110000,10010000110,10000101100,10000100110,10110010000,10110000100,10011010000,10011000010,10000110100,10000110010,11000010010,11001010000,11110111010,11000010100,10001111010,10100111100,10010111100,10010011110,10111100100,10011110100,10011110010,11110100100,11110010100,11110010010,11011011110,11011110110,11110110110,10101111000,10100011110,10001011110,10111101000,10111100010,11110101000,11110100010,10111011110,10111101110,11101011110,11110101110,11010000100,11010010000,11010011100,1100011101011];
+/* Code 128 encoder matching common card generators (ZXing style):
+   Code C for runs of 4+ digits (or a 2-digit whole value), otherwise Code B, Code A for control chars. */
+function code128Bits(value){
+  const codes = []; let set = null, i = 0;
+  const digitRun = k => { let n = 0; while (k + n < value.length && value[k + n] >= '0' && value[k + n] <= '9') n++; return n; };
+  while (i < value.length){
+    const d = digitRun(i);
+    const useC = set === 'C' ? d >= 2
+      : (d >= 4 && (set === null || d % 2 === 0)) || (set === null && d === 2 && value.length === 2);
+    if (useC){
+      if (set !== 'C'){ codes.push(set === null ? 105 : 99); set = 'C'; }
+      codes.push(+value.substr(i, 2)); i += 2; continue;
+    }
+    const ch = value.charCodeAt(i);
+    if (ch > 127) throw new Error('Code 128 supports ASCII only');
+    const need = ch < 32 ? 'A' : (ch >= 96 ? 'B' : (set === 'A' ? 'A' : 'B'));
+    if (set !== need){ codes.push(set === null ? (need === 'A' ? 103 : 104) : (need === 'A' ? 101 : 100)); set = need; }
+    codes.push(ch < 32 ? ch + 64 : ch - 32); i++;
+  }
+  let sum = codes[0];
+  for (let k = 1; k < codes.length; k++) sum += codes[k] * k;
+  codes.push(sum % 103, 106);
+  return codes.map(c => String(C128_BARS[c])).join('');
+}
+function renderCode128(value){
+  const bits = '0'.repeat(11) + code128Bits(value) + '0'.repeat(11); // 11-module quiet zones
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${bits.length} 50`);
+  const bg = document.createElementNS(NS, 'rect');
+  bg.setAttribute('width', bits.length); bg.setAttribute('height', 50); bg.setAttribute('fill', '#fff');
+  let d = '';
+  for (let x = 0; x < bits.length;){
+    if (bits[x] === '1'){ let w = 1; while (bits[x + w] === '1') w++; d += `M${x} 0h${w}v50h-${w}z`; x += w; } else x++;
+  }
+  const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', '#000');
+  svg.append(bg, p);
+  return normaliseSvg(svg, true);
+}
+function render1D(card){
+  if (typeof JsBarcode === 'undefined') throw new Error('Barcode library not loaded (offline?)');
+  const svg = document.createElementNS(NS, 'svg');
+  let ok = true;
+  JsBarcode(svg, card.value, {
+    format: card.format, width: 2, height: 100, displayValue: false, flat: true,
+    marginTop: 0, marginBottom: 0, marginLeft: 22, marginRight: 22, // ~11 module quiet zone
+    background: '#ffffff', lineColor: '#000000', valid: v => { ok = v; }
+  });
+  if (!ok) throw new Error(`Not a valid ${FORMATS[card.format].label} value`);
+  return normaliseSvg(svg, true);
+}
+function renderQR(text){
+  if (typeof qrcode === 'undefined') throw new Error('QR library not loaded (offline?)');
+  if (qrcode.stringToBytesFuncs && qrcode.stringToBytesFuncs['UTF-8']) qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+  const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), q = 4, size = n + q * 2;
+  let d = '';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + q} ${r + q}h1v1h-1z`;
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  svg.setAttribute('shape-rendering', 'crispEdges');
+  const bg = document.createElementNS(NS, 'rect');
+  bg.setAttribute('width', size); bg.setAttribute('height', size); bg.setAttribute('fill', '#fff');
+  const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('fill', '#000');
+  svg.append(bg, p);
+  return svg;
+}
+function renderPDF417(text){
+  if (typeof bwipjs === 'undefined' || !bwipjs.toSVG) throw new Error('PDF417 library not loaded (offline?)');
+  const s = bwipjs.toSVG({ bcid: 'pdf417', text, scale: 2, padding: 8, backgroundcolor: 'FFFFFF' });
+  const doc = new DOMParser().parseFromString(s, 'image/svg+xml');
+  return normaliseSvg(document.importNode(doc.documentElement, true), false);
+}
+function renderCode(card){
+  const f = FORMATS[card.format];
+  if (!f) throw new Error('Unknown format');
+  if (card.format === 'CODE128') return renderCode128(card.value);
+  if (f.kind === 'oned') return render1D(card);
+  if (f.kind === 'qr') return renderQR(card.value);
+  return renderPDF417(card.value);
+}
+function textOn(hex){
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 160 ? '#111' : '#fff';
+}
+
+/* ---------- Card list ---------- */
+function chip(label, fn, disabled){
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = label; b.disabled = !!disabled;
+  b.addEventListener('click', e => { e.stopPropagation(); fn(); });
+  return b;
+}
+function renderList(){
+  const list = $('#list'); list.textContent = '';
+  $('#editBtn').textContent = editMode ? 'Done' : 'Edit';
+  $('#editHint').hidden = !editMode;
+  const cards = allCards();
+  if (!cards.length){
+    const e = document.createElement('div'); e.className = 'empty';
+    e.textContent = 'No cards yet. Tap "Add card" to scan one.';
+    list.append(e); return;
+  }
+  cards.forEach(card => {
+    const el = document.createElement('div');
+    el.className = 'card'; el.setAttribute('role', 'button'); el.tabIndex = 0;
+    el.style.background = card.colour; el.style.color = textOn(card.colour);
+
+    const top = document.createElement('div'); top.className = 'card-top';
+    const name = document.createElement('div'); name.className = 'card-name'; name.textContent = card.name;
+    top.append(name);
+    if (card.preset){ const l = document.createElement('span'); l.className = 'lock'; l.textContent = 'Preset'; top.append(l); }
+    top.append(chip('Copy link', () => copyText(cardLink(card)), card.empty));
+    el.append(top);
+
+    const pv = document.createElement('div'); pv.className = 'preview ' + FORMATS[card.format].kind;
+    if (card.empty) pv.textContent = 'No barcode yet. Tap to add it.';
+    else { try { pv.append(renderCode(card)); } catch (e) { pv.textContent = e.message; } }
+    el.append(pv);
+
+    if (editMode && card.preset){
+      const row = document.createElement('div'); row.className = 'chips';
+      row.append(chip(card.empty ? 'Add barcode' : 'Edit barcode', () => openForm(card)));
+      el.append(row);
+    }
+    if (editMode && !card.preset){
+      const i = userCards.findIndex(c => c.id === card.id);
+      const row = document.createElement('div'); row.className = 'chips';
+      row.append(
+        chip('Edit', () => openForm(card)),
+        chip('\u2191 Up', () => moveCard(card.id, -1), i === 0),
+        chip('\u2193 Down', () => moveCard(card.id, 1), i === userCards.length - 1)
+      );
+      el.append(row);
+    }
+    el.addEventListener('click', () => {
+      if (editMode || card.empty) openForm(card);
+      else openFull(card, false);
+    });
+    list.append(el);
+  });
+}
+function moveCard(id, dir){
+  const i = userCards.findIndex(c => c.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= userCards.length) return;
+  [userCards[i], userCards[j]] = [userCards[j], userCards[i]];
+  saveCards(); renderList();
+}
+
+/* ---------- Full screen view ---------- */
+function openFull(card, transient){
+  closeSheets();
+  fullCard = card; fullTransient = !!transient;
+  $('#fvName').textContent = card.name || 'Card';
+  const box = $('#fvCode'); box.textContent = '';
+  box.className = 'fv-code ' + (FORMATS[card.format] ? FORMATS[card.format].kind : '');
+  try { box.append(renderCode(card)); }
+  catch (e) { const d = document.createElement('div'); d.className = 'fv-err'; d.textContent = 'Could not render: ' + e.message; box.append(d); }
+  const v = $('#fvValue'); v.textContent = card.value; v.classList.toggle('long', card.value.length > 30);
+  $('#fvSave').hidden = !fullTransient;
+  $('#full').classList.add('open'); document.body.classList.add('noscroll');
+  requestWake();
+}
+function closeFull(){
+  $('#full').classList.remove('open'); document.body.classList.remove('noscroll');
+  fullCard = null; releaseWake();
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+}
+async function requestWake(){
+  try {
+    if ('wakeLock' in navigator && !wakeLock){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (e) { wakeLock = null; }
+}
+function releaseWake(){ try { if (wakeLock) wakeLock.release(); } catch (e) {} wakeLock = null; }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && fullCard) requestWake();
+});
+
+/* ---------- Links ---------- */
+function b64urlEncode(str){
+  let bin = ''; new TextEncoder().encode(str).forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(s){
+  s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
+  return new TextDecoder().decode(Uint8Array.from(atob(s), ch => ch.charCodeAt(0)));
+}
+function cardLink(card){
+  const data = { id: card.id, name: card.name, value: card.value, format: card.format, colour: card.colour };
+  return location.origin + location.pathname + '#card=' + b64urlEncode(JSON.stringify(data));
+}
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); toast('Link copied'); }
+  catch (e) { window.prompt('Copy this link:', t); }
+}
+function handleHash(){
+  let h = location.hash.slice(1);
+  if (!h) return;
+  try { h = decodeURIComponent(h); } catch (e) {}
+  if (h.startsWith('card=')){
+    let c = null;
+    try { c = JSON.parse(b64urlDecode(h.slice(5))); } catch (e) {}
+    if (!validCard(c)){ toast('Invalid card link'); return; }
+    c = cleanCard(c);
+    const existing = allCards().find(x => x.value === c.value && x.format === c.format);
+    openFull(existing || c, !existing);
+    return;
+  }
+  const c = allCards().find(x => x.id === h);
+  if (c && c.empty){ openForm(c); toast('Add the barcode for ' + c.name); }
+  else if (c) openFull(c, false);
+}
+window.addEventListener('hashchange', handleHash);
+
+/* ---------- Sheets ---------- */
+function openSheet(id){ closeSheets(); $(id).classList.add('open'); }
+function closeSheets(){ document.querySelectorAll('.sheet-wrap.open').forEach(s => s.classList.remove('open')); }
+document.querySelectorAll('.sheet-wrap').forEach(w => {
+  w.addEventListener('click', e => { if (e.target === w) closeSheets(); });
+});
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+
+/* ---------- Form ---------- */
+(function initForm(){
+  const sel = $('#fFormat');
+  Object.entries(FORMATS).forEach(([k, f]) => { const o = document.createElement('option'); o.value = k; o.textContent = f.label; sel.append(o); });
+  const sw = $('#swatches');
+  SWATCHES.forEach(c => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'swatch'; b.style.background = c; b.dataset.c = c;
+    b.setAttribute('aria-label', 'Colour ' + c);
+    b.addEventListener('click', () => setColour(c));
+    sw.append(b);
+  });
+  const custom = document.createElement('input'); custom.type = 'color'; custom.className = 'swatch-custom'; custom.id = 'fCustom';
+  custom.addEventListener('input', () => setColour(custom.value));
+  sw.append(custom);
+  ['input', 'change'].forEach(ev => { $('#fValue').addEventListener(ev, updatePreview); $('#fFormat').addEventListener(ev, updatePreview); });
+})();
+function setColour(c){
+  formColour = validColour(c);
+  document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('sel', s.dataset.c === formColour));
+}
+function formValue(){
+  const fmt = $('#fFormat').value, raw = $('#fValue').value;
+  return FORMATS[fmt].kind === 'oned' ? raw.trim() : raw;
+}
+function updatePreview(){
+  const fmt = $('#fFormat').value, val = formValue(), box = $('#formPreview');
+  $('#fValue').inputMode = ['EAN13', 'EAN8', 'UPC'].includes(fmt) ? 'numeric' : 'text';
+  box.textContent = ''; box.className = 'form-preview ' + FORMATS[fmt].kind; $('#formErr').textContent = '';
+  if (!val){ box.textContent = 'Preview appears here'; return; }
+  try { box.append(renderCode({ value: val, format: fmt })); }
+  catch (e) { box.textContent = e.message; }
+}
+function openForm(card, prefill){
+  formTarget = card || null;
+  const src = { ...(card || {}), ...(prefill || {}) };
+  const preset = !!(card && card.preset);
+  $('#formTitle').textContent = preset ? card.name : (card ? 'Edit card' : 'New card');
+  $('#fNameRow').hidden = preset; $('#fColourRow').hidden = preset;
+  $('#fName').value = src.name || '';
+  $('#fValue').value = src.value || '';
+  $('#fFormat').value = FORMATS[src.format] ? src.format : 'CODE128';
+  setColour(src.colour || SWATCHES[(userCards.length + PRESET_CARDS.length) % SWATCHES.length]);
+  $('#fDelete').hidden = !card || (preset && card.empty);
+  $('#fDelete').textContent = preset ? 'Clear barcode' : 'Delete card';
+  openSheet('#formSheet');
+  updatePreview();
+}
+$('#fSave').addEventListener('click', () => {
+  const fmt = $('#fFormat').value, value = formValue();
+  const name = $('#fName').value.trim() || 'Card';
+  if (!value){ $('#formErr').textContent = 'Enter a barcode value.'; return; }
+  try { renderCode({ value, format: fmt }); }
+  catch (e) { $('#formErr').textContent = e.message; return; }
+  if (formTarget && formTarget.preset){
+    setPresetValue(formTarget.id, value, fmt);
+  } else if (formTarget){
+    const c = userCards.find(x => x.id === formTarget.id);
+    if (c) Object.assign(c, { name, value, format: fmt, colour: formColour });
+  } else {
+    userCards.push({ id: newId(), name, value, format: fmt, colour: formColour });
+  }
+  saveCards(); renderList(); closeSheets();
+  toast(formTarget ? 'Card updated' : 'Card added');
+});
+$('#fScan').addEventListener('click', () => {
+  scanTarget = formTarget;
+  scanKeep = { name: $('#fName').value, colour: formColour };
+  startScan();
+});
+$('#fDelete').addEventListener('click', () => {
+  if (!formTarget) return;
+  if (formTarget.preset){
+    if (!confirm(`Clear the barcode for "${formTarget.name}"?`)) return;
+    setPresetValue(formTarget.id, '');
+  } else {
+    if (!confirm(`Delete "${formTarget.name}"?`)) return;
+    userCards = userCards.filter(c => c.id !== formTarget.id);
+    saveCards();
+  }
+  renderList(); closeSheets();
+});
+
+/* ---------- Scanner ---------- */
+async function startScan(){
+  closeSheets();
+  if (!window.ZXing || !window.ZXingBrowser){ toast('Scanner library not loaded'); openForm(null, {}); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert('Camera not available. Use manual entry.'); openForm(null, {}); return; }
+  scanDone = false;
+  $('#scanMsg').textContent = 'Point the camera at a barcode';
+  $('#scanner').classList.add('open'); document.body.classList.add('noscroll');
+  const F = ZXing.BarcodeFormat, hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.CODE_128, F.CODE_39, F.EAN_13, F.EAN_8, F.UPC_A, F.QR_CODE, F.PDF_417]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  const reader = new ZXingBrowser.BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 100 });
+  try {
+    scanControls = await reader.decodeFromConstraints(
+      { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      $('#scanVideo'),
+      (result) => {
+        if (!result || scanDone) return;
+        scanDone = true;
+        const value = result.getText();
+        const zx = F[result.getBarcodeFormat()];
+        stopScan();
+        const prefill = { ...(scanKeep || {}), value, format: ZX_TO_FMT[zx] || 'CODE128' };
+        openForm(scanTarget, prefill);
+        scanTarget = null; scanKeep = null;
+        toast('Scanned ' + (FORMATS[ZX_TO_FMT[zx]] ? FORMATS[ZX_TO_FMT[zx]].label : zx));
+      }
+    );
+    if (scanDone) stopScan();
+  } catch (e) {
+    stopScan();
+    alert('Could not start the camera: ' + (e.message || e.name) + '\nCheck camera access in Settings > Safari > Camera.');
+  }
+}
+function stopScan(){
+  try { if (scanControls) scanControls.stop(); } catch (e) {}
+  scanControls = null;
+  if (!scanDone){ scanTarget = null; scanKeep = null; }
+  $('#scanner').classList.remove('open'); document.body.classList.remove('noscroll');
+}
+
+/* ---------- Backup ---------- */
+function exportCards(){
+  const data = JSON.stringify({ app: 'barcode-wallet', version: 1, exported: new Date().toISOString(),
+    cards: allCards().filter(c => !c.empty).map(c => ({ id: c.id, name: c.name, value: c.value, format: c.format, colour: c.colour, ...(c.preset ? { preset: true } : {}) })) }, null, 2);
+  const fname = 'barcode-wallet-' + new Date().toISOString().slice(0, 10) + '.json';
+  const blob = new Blob([data], { type: 'application/json' });
+  try {
+    const file = new File([blob], fname, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ files: [file], title: 'Barcode Wallet backup' }).catch(() => {});
+      return;
+    }
+  } catch (e) {}
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function importCards(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const data = JSON.parse(r.result);
+      const arr = Array.isArray(data) ? data : data.cards;
+      if (!Array.isArray(arr)) throw new Error();
+      let added = 0, updated = 0;
+      arr.forEach(c => {
+        if (!validCard(c)) return;
+        if (PRESET_CARDS.some(p => p.id === c.id)){ setPresetValue(c.id, c.value, c.format); updated++; return; }
+        if (c.preset) return;
+        const clean = cleanCard(c);
+        const i = userCards.findIndex(x => x.id === clean.id);
+        if (i >= 0){ userCards[i] = clean; updated++; } else { userCards.push(clean); added++; }
+      });
+      saveCards(); renderList(); closeSheets();
+      toast(`Imported: ${added} new, ${updated} updated`);
+    } catch (e) { alert('That file is not a valid backup.'); }
+  };
+  r.readAsText(file);
+}
+
+/* ---------- Misc ---------- */
+let toastTimer;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+function makeIcon(){
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180;
+    const g = c.getContext('2d');
+    g.fillStyle = '#111214'; g.fillRect(0, 0, 180, 180);
+    g.fillStyle = '#ffffff';
+    const x = 28, y = 46, w = 124, h = 88, r = 14;
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); g.fill();
+    g.fillStyle = '#000';
+    const bars = [3,1,2,1,1,3,2,1,3,1,1,2,2,1,3,1,2]; let bx = 54;
+    bars.forEach((bw, i) => { if (i % 2 === 0) g.fillRect(bx, 60, bw * 2.4, 60); bx += bw * 2.4; });
+    $('#touchIcon').href = c.toDataURL('image/png');
+  } catch (e) {}
+}
+
+/* ---------- Wiring ---------- */
+$('#addBtn').addEventListener('click', () => openSheet('#addSheet'));
+$('#addScan').addEventListener('click', () => { scanTarget = null; scanKeep = null; startScan(); });
+$('#addManual').addEventListener('click', () => openForm(null, {}));
+$('#scanCancel').addEventListener('click', stopScan);
+$('#scanManual').addEventListener('click', () => { const t = scanTarget, k = scanKeep; stopScan(); openForm(t, k || {}); });
+$('#editBtn').addEventListener('click', () => { editMode = !editMode; renderList(); });
+$('#menuBtn').addEventListener('click', () => openSheet('#menuSheet'));
+$('#exportBtn').addEventListener('click', exportCards);
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) importCards(f); e.target.value = ''; });
+$('#fvDone').addEventListener('click', closeFull);
+$('#fvCopy').addEventListener('click', () => fullCard && copyText(cardLink(fullCard)));
+$('#fvSave').addEventListener('click', () => {
+  if (!fullCard) return;
+  const c = cleanCard(fullCard);
+  const slot = allCards().find(x => x.preset && x.id === c.id);
+  if (slot) setPresetValue(slot.id, c.value, c.format);
+  else {
+    if (allCards().some(x => x.id === c.id)) c.id = newId();
+    userCards.push(c); saveCards();
+  }
+  renderList();
+  fullTransient = false; $('#fvSave').hidden = true; toast('Saved to wallet');
+});
+
+makeIcon();
+renderList();
+handleHash();
+</script>
+</body>
+</html>
